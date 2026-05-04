@@ -22,10 +22,5 @@ jobs:
           preset: Android
           debugMode: "true"
           projectDir: .
-          # Don't specify args or entryPoint - let it work normally
-      
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Android-APK
-          path: ${{ github.workspace }}/${{ steps.build.outputs.build }}
+          entryPoint: /usr/bin/godot
+          args: --headless --export-debug Android build/game.apk
