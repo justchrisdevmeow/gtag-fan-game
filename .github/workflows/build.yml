@@ -21,97 +21,6 @@ jobs:
           unzip godot.zip
           chmod +x Godot_v4.6.2-stable_linux.x86_64
       
-      - name: Download Android export templates (for reference only)
-        run: |
-          mkdir -p ~/.local/share/godot/export_templates/4.6.2.stable
-          wget -O /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_export_templates.tpz
-          cd ~/.local/share/godot/export_templates/4.6.2.stable
-          unzip -o /tmp/templates.tpz
-          if [ -d templates ]; then
-            mv templates/* .
-            rmdir templates
-          fi
-      
-      - name: Bypass Godot's Android template check (create fake template)
-        run: |
-          # Create the exact file structure Godot expects
-          mkdir -p android/src/main/java/com/godot/game
-          mkdir -p android/libs/debug
-          mkdir -p android/libs/release
-          mkdir -p android/gradle/wrapper
-          mkdir -p android/build
-          
-          # Create AndroidManifest.xml
-          cat > android/src/main/AndroidManifest.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.jdchris.gtagfangame">
-              <application android:label="Game">
-                  <activity android:name="org.godotengine.godot.GodotActivity"
-                      android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-          
-          # Create build.gradle
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:7.2.1'
-              }
-          }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          task clean(type: Delete) {
-              delete rootProject.buildDir
-          }
-          EOF
-          
-          # Create gradle.properties
-          cat > android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx1024M
-          android.useAndroidX=true
-          android.enableJetifier=true
-          EOF
-          
-          # Create settings.gradle
-          cat > android/settings.gradle << 'EOF'
-          include ':app'
-          EOF
-          
-          # Create dummy GodotApp.java
-          cat > android/src/main/java/com/godot/game/GodotApp.java << 'EOF'
-          package com.godot.game;
-          public class GodotApp {
-          }
-          EOF
-          
-          # Copy template AAR files if available (optional)
-          if [ -f ~/.local/share/godot/export_templates/4.6.2.stable/android_debug.apk ]; then
-            echo "Template files available"
-          fi
-          
-          # Mark template as installed
-          echo "installed" > android/.gdignore
-          
-          echo "✅ Android template bypass created"
-          echo ""
-          echo "=== DIRECTORY STRUCTURE ==="
-          find android -type f | head -20
-      
       - name: Generate debug keystore
         run: |
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
@@ -119,59 +28,30 @@ jobs:
       
       - name: Fix export preset
         run: |
-          # Enable Gradle Build
           sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
-          
-          # Set SDK versions
           sed -i 's|gradle_build/min_sdk=""|gradle_build/min_sdk="26"|' export_presets.cfg
           sed -i 's|gradle_build/target_sdk=""|gradle_build/target_sdk="34"|' export_presets.cfg
-          
-          # Set keystore (DEBUG build)
           sed -i 's|keystore/debug=".*"|keystore/debug="debug.keystore"|' export_presets.cfg
           sed -i 's|keystore/debug_password=".*"|keystore/debug_password="android"|' export_presets.cfg
           
-          # Add debug user if missing
           if ! grep -q "keystore/debug_user" export_presets.cfg; then
             sed -i '/keystore\/debug_password/a keystore/debug_user="androiddebugkey"' export_presets.cfg
-          else
-            sed -i 's|keystore/debug_user=".*"|keystore/debug_user="androiddebugkey"|' export_presets.cfg
           fi
           
-          # Set export path
           sed -i 's|export_path=".*"|export_path="build/game_debug.apk"|' export_presets.cfg
-          
-          echo "=== FIXED EXPORT PRESET ==="
-          grep -E "use_gradle_build|min_sdk|target_sdk|keystore" export_presets.cfg
       
       - name: Install xvfb
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
       
-      - name: Export DEBUG APK (bypassed template check)
+      - name: Export APK
         run: |
           mkdir -p build
-          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game_debug.apk 2>&1 | tee export.log
-          
-          if [ -f "build/game_debug.apk" ]; then
-            echo "✅ DEBUG APK created successfully!"
-            ls -la build/game_debug.apk
-            file build/game_debug.apk
-          else
-            echo "❌ Export failed. Last 100 lines:"
-            tail -100 export.log
-            exit 1
-          fi
+          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game_debug.apk
       
-      - name: Upload DEBUG APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: godot4-debug-apk
           path: build/*.apk
-      
-      - name: Upload export log (if failed)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: export-log
-          path: export.log
