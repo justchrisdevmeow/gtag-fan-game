@@ -21,60 +21,40 @@ jobs:
           unzip godot.zip
           chmod +x Godot_v4.6.2-stable_linux.x86_64
       
-      - name: Setup Android template properly
+      - name: Download all Android export templates
         run: |
-          # Ensure export templates directory exists
           mkdir -p ~/.local/share/godot/export_templates/4.6.2.stable
           cd ~/.local/share/godot/export_templates/4.6.2.stable
           
-          # Download export templates if android_source.zip is missing
-          if [ ! -f "android_source.zip" ]; then
-            echo "Downloading export templates..."
-            wget -O /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_export_templates.tpz
-            unzip -o /tmp/templates.tpz
-            echo "✅ Export templates extracted"
-            
-            # Move android_source.zip from templates folder to current directory
-            if [ -f "templates/android_source.zip" ]; then
-              mv templates/android_source.zip .
-              echo "✅ android_source.zip moved to current directory"
-            fi
+          # Download and extract templates
+          wget -O /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_export_templates.tpz
+          unzip -o /tmp/templates.tpz
+          
+          # Move everything from templates folder to current directory
+          if [ -d "templates" ]; then
+            mv templates/* .
+            rmdir templates
           fi
           
-          # Verify android_source.zip exists
-          if [ -f "android_source.zip" ]; then
-            echo "✅ android_source.zip found at $(pwd)/android_source.zip"
-            ls -la android_source.zip
-          else
-            echo "❌ android_source.zip not found"
-            exit 1
-          fi
-          
-          # Go back to project root
-          cd "$GITHUB_WORKSPACE"
+          # Verify all required files exist
+          echo "=== Required template files ==="
+          ls -la android_debug.apk android_release.apk android_source.zip
       
       - name: Install xvfb
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
       
-      - name: Bypass Godot's picky check completely
+      - name: Install Android build template in project
         run: |
-          # Create EVERYTHING Godot might be looking for
-          mkdir -p android/.godot
-          echo "template_installed_v4.6.2" > android/.godot/template_installed
+          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --install-android-build-template
           
-          # Create a dummy .godot folder in project root
-          mkdir -p .godot
-          echo "android_template_installed" > .godot/android_template_status
-          
-          # Also create the export templates cache marker
-          mkdir -p ~/.local/share/godot/export_templates
-          echo "4.6.2.stable" > ~/.local/share/godot/export_templates/installed_version
-          
-          # Now try export without the install command
-          mkdir -p build
-          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game_debug.apk
+          if [ -d "android" ] && [ -f "android/build.gradle" ]; then
+            echo "✅ Android template installed"
+          else
+            echo "❌ Installation failed"
+            exit 1
+          fi
       
       - name: Generate debug keystore
         run: |
@@ -83,29 +63,17 @@ jobs:
       
       - name: Fix export preset
         run: |
-          # Enable Gradle Build
           sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
-          
-          # Set SDK versions
           sed -i 's|gradle_build/min_sdk=""|gradle_build/min_sdk="26"|' export_presets.cfg
           sed -i 's|gradle_build/target_sdk=""|gradle_build/target_sdk="34"|' export_presets.cfg
-          
-          # Set keystore (DEBUG build)
           sed -i 's|keystore/debug=".*"|keystore/debug="debug.keystore"|' export_presets.cfg
           sed -i 's|keystore/debug_password=".*"|keystore/debug_password="android"|' export_presets.cfg
           
-          # Add debug user if missing
           if ! grep -q "keystore/debug_user" export_presets.cfg; then
             sed -i '/keystore\/debug_password/a keystore/debug_user="androiddebugkey"' export_presets.cfg
-          else
-            sed -i 's|keystore/debug_user=".*"|keystore/debug_user="androiddebugkey"|' export_presets.cfg
           fi
           
-          # Set export path
           sed -i 's|export_path=".*"|export_path="build/game_debug.apk"|' export_presets.cfg
-          
-          echo "=== FIXED EXPORT PRESET ==="
-          grep -E "use_gradle_build|min_sdk|target_sdk|keystore" export_presets.cfg
       
       - name: Export DEBUG APK
         run: |
@@ -113,24 +81,16 @@ jobs:
           xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game_debug.apk 2>&1 | tee export.log
           
           if [ -f "build/game_debug.apk" ]; then
-            echo "✅ DEBUG APK created successfully!"
+            echo "✅ APK created!"
             ls -la build/game_debug.apk
-            file build/game_debug.apk
           else
-            echo "❌ Export failed. Last 100 lines:"
+            echo "❌ Export failed"
             tail -100 export.log
             exit 1
           fi
       
-      - name: Upload DEBUG APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: godot4-debug-apk
           path: build/*.apk
-      
-      - name: Upload export log (if failed)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: export-log
-          path: export.log
