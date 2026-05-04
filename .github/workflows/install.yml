@@ -1,4 +1,4 @@
-name: Install Android Template to Repo
+name: Install Android Template to Repo (Lightweight)
 
 on:
   workflow_dispatch:
@@ -35,17 +35,21 @@ jobs:
             rmdir templates
           fi
       
-      - name: Extract Android template directly to repo
+      - name: Extract ONLY config files (skip large .aar files)
         run: |
           cd ~/.local/share/godot/export_templates/4.6.2.stable
           
           # Extract android_source.zip
           unzip -o android_source.zip -d /tmp/android_template/
           
-          # Copy to repo's android folder
-          rm -rf "$GITHUB_WORKSPACE/android"
+          # Create lightweight android folder WITHOUT .aar files
           mkdir -p "$GITHUB_WORKSPACE/android"
+          
+          # Copy only configuration files (no large libs folder)
           cp -r /tmp/android_template/* "$GITHUB_WORKSPACE/android/"
+          
+          # Remove the large .aar files (they'll be downloaded by Gradle during build)
+          rm -rf "$GITHUB_WORKSPACE/android/libs/"
           
           # Remove conflicting test files
           rm -rf "$GITHUB_WORKSPACE/android/src/instrumented/assets/"
@@ -54,15 +58,28 @@ jobs:
           find "$GITHUB_WORKSPACE/android" -name "*.gd" -delete 2>/dev/null || true
           find "$GITHUB_WORKSPACE/android" -name "*.tscn" -delete 2>/dev/null || true
           
-          echo "✅ Android template extracted to android/"
-          ls -la "$GITHUB_WORKSPACE/android/"
+          # Create .gitignore to prevent future .aar commits
+          cat > "$GITHUB_WORKSPACE/android/.gitignore" << 'EOF'
+          # Ignore large library files (they are downloaded by Gradle)
+          /libs/
+          *.aar
+          *.jar
+          EOF
+          
+          echo "✅ Lightweight Android template extracted (without .aar files)"
+          echo ""
+          echo "=== Total size of android folder ==="
+          du -sh "$GITHUB_WORKSPACE/android"
+          echo ""
+          echo "=== Files in android (should be small) ==="
+          find "$GITHUB_WORKSPACE/android" -type f | head -20
       
-      - name: Commit android folder to repo
+      - name: Commit lightweight android folder to repo
         run: |
           cd "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add android/
           git status
-          git commit -m "Add Android build template [skip ci]" || echo "No changes to commit"
+          git commit -m "Add lightweight Android build template (without .aar files) [skip ci]" || echo "No changes to commit"
           git push
