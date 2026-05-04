@@ -1,0 +1,4 @@
+# Ignore large library files (they are downloaded by Gradle)
+/libs/
+*.aar
+*.jar
