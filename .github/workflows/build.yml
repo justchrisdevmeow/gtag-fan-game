@@ -15,14 +15,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
       
-      - name: Install Godot 4.6.2 HEADLESS
+      - name: Install Godot 4.6.2
         run: |
-          wget -O godot-headless.zip https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_linux_headless.x86_64.zip
-          unzip godot-headless.zip
-          chmod +x Godot_v4.6.2-stable_linux_headless.x86_64
-          mv Godot_v4.6.2-stable_linux_headless.x86_64 godot
-          # Verify it works
-          ./godot --version
+          wget -O godot.zip https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_linux.x86_64.zip
+          unzip godot.zip
+          chmod +x Godot_v4.6.2-stable_linux.x86_64
       
       - name: Download Android export templates
         run: |
@@ -34,75 +31,51 @@ jobs:
             mv templates/* .
             rmdir templates
           fi
-          # Verify templates installed
-          ls -la ~/.local/share/godot/export_templates/4.6.2.stable/
 
       - name: Generate debug keystore
         run: |
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug, O=Android, C=US" -storepass android -keypass android
-          ls -la debug.keystore
 
       - name: Fix export preset
         run: |
-          # Backup original
-          cp export_presets.cfg export_presets.cfg.bak
-          
-          # Fix required fields
           sed -i 's|gradle_build/min_sdk=""|gradle_build/min_sdk="26"|' export_presets.cfg
           sed -i 's|gradle_build/target_sdk=""|gradle_build/target_sdk="34"|' export_presets.cfg
           sed -i 's|keystore/debug=".*"|keystore/debug="debug.keystore"|' export_presets.cfg
           sed -i 's|keystore/debug_password=".*"|keystore/debug_password="android"|' export_presets.cfg
-          sed -i 's|export_path=".*"|export_path="build/game.apk"|' export_presets.cfg
           
           echo "=== FIXED PRESET ==="
           cat export_presets.cfg
       
-      - name: Export APK with FULL logging
+      - name: Install xvfb (virtual display)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      
+      - name: Export APK
         run: |
           mkdir -p build
+          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game.apk 2>&1 | tee export.log
           
-          # Run with timeout and capture everything
-          echo "Starting export at $(date)"
-          
-          # Try debug export first
-          timeout 600 ./godot --verbose --export-debug "Android" 2>&1 | tee export_full.log
-          
-          # Check exit code
-          EXIT_CODE=${PIPESTATUS[0]}
-          echo "Exit code: $EXIT_CODE"
-          echo "Finished at $(date)"
-          
-          # If exit code is not 0, show the error
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "=== EXPORT FAILED with code $EXIT_CODE ==="
-            echo "=== LAST 50 LINES OF LOG ==="
-            tail -50 export_full.log
-            echo "=== CHECKING FOR SPECIFIC ERRORS ==="
-            grep -i "error\|fail\|missing\|keystore\|sdk\|template\|permission\|java" export_full.log || echo "No specific errors found"
-            exit $EXIT_CODE
+          # Check if APK was created
+          if [ -f "build/game.apk" ]; then
+            echo "✅ APK created successfully!"
+            ls -la build/game.apk
+          else
+            echo "❌ APK not found. Showing last 100 lines of log:"
+            tail -100 export.log
+            exit 1
           fi
-          
-          echo "=== EXPORT SUCCESSFUL ==="
-          ls -la build/
       
-      - name: Upload APK (on success)
+      - name: Upload APK
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: godot4-apk
           path: build/*.apk
       
-      - name: Upload debug log (always)
-        uses: actions/upload-artifact@v4
+      - name: Upload debug log
         if: always()
-        with:
-          name: export-debug-log
-          path: export_full.log
-      
-      - name: Upload export preset (always)
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: export-preset
-          path: export_presets.cfg
+          name: export-log
+          path: export.log
