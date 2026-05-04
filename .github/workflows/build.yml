@@ -32,7 +32,7 @@ jobs:
             rmdir templates
           fi
       
-      - name: Manually install Android build template to correct path
+      - name: Manually install Android build template
         run: |
           cd ~/.local/share/godot/export_templates/4.6.2.stable
           
@@ -40,30 +40,33 @@ jobs:
             rm -rf /tmp/android_template
             unzip -o android_source.zip -d /tmp/android_template/
             
-            # Find and copy the android folder
-            if [ -d "/tmp/android_template/android" ]; then
-              mkdir -p "$GITHUB_WORKSPACE/android"
-              cp -r /tmp/android_template/android/* "$GITHUB_WORKSPACE/android/"
-              echo "✅ Android template installed"
-            elif [ -d "/tmp/android_template/templates/android" ]; then
-              mkdir -p "$GITHUB_WORKSPACE/android"
-              cp -r /tmp/android_template/templates/android/* "$GITHUB_WORKSPACE/android/"
-              echo "✅ Android template installed"
-            else
-              # Copy everything and hope for the best
-              mkdir -p "$GITHUB_WORKSPACE/android"
-              cp -r /tmp/android_template/* "$GITHUB_WORKSPACE/android/"
-              echo "✅ Copied all contents"
-            fi
+            # Copy everything to project android folder
+            mkdir -p "$GITHUB_WORKSPACE/android"
+            cp -r /tmp/android_template/* "$GITHUB_WORKSPACE/android/"
+            echo "✅ Android template installed"
             
             # Verify
-            echo "=== VERIFICATION ==="
             ls -la "$GITHUB_WORKSPACE/android/"
             [ -f "$GITHUB_WORKSPACE/android/build.gradle" ] && echo "✅ build.gradle exists"
           else
             echo "❌ android_source.zip not found"
             exit 1
           fi
+      
+      - name: Remove conflicting test files from Android template
+        run: |
+          # Remove test project that has its own project.godot (causes warnings)
+          rm -rf android/src/instrumented/assets/ 2>/dev/null || true
+          rm -rf android/src/instrumented/java/ 2>/dev/null || true
+          rm -rf android/src/androidTestInstrumented/ 2>/dev/null || true
+          rm -rf android/src/instrumented/res/ 2>/dev/null || true
+          
+          # Remove any Godot script files from android folder
+          find android -name "*.gd" -delete 2>/dev/null || true
+          find android -name "*.tscn" -delete 2>/dev/null || true
+          find android -name "*.uid" -delete 2>/dev/null || true
+          
+          echo "✅ Conflicting test files removed"
       
       - name: Generate debug keystore
         run: |
@@ -72,19 +75,32 @@ jobs:
       
       - name: Fix export preset
         run: |
+          # Enable Gradle Build (REQUIRED for Godot 4)
           sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
+          
+          # Set SDK versions
           sed -i 's|gradle_build/min_sdk=""|gradle_build/min_sdk="26"|' export_presets.cfg
           sed -i 's|gradle_build/target_sdk=""|gradle_build/target_sdk="34"|' export_presets.cfg
+          
+          # Set keystore (DEBUG build)
           sed -i 's|keystore/debug=".*"|keystore/debug="debug.keystore"|' export_presets.cfg
           sed -i 's|keystore/debug_password=".*"|keystore/debug_password="android"|' export_presets.cfg
           
+          # Add debug user if missing
           if ! grep -q "keystore/debug_user" export_presets.cfg; then
             sed -i '/keystore\/debug_password/a keystore/debug_user="androiddebugkey"' export_presets.cfg
+          else
+            sed -i 's|keystore/debug_user=".*"|keystore/debug_user="androiddebugkey"|' export_presets.cfg
           fi
           
+          # Ensure release keystore is empty (DEBUG build)
+          sed -i 's|keystore/release=".*"|keystore/release=""|' export_presets.cfg
+          sed -i 's|keystore/release_password=".*"|keystore/release_password=""|' export_presets.cfg
+          
+          # Set export path
           sed -i 's|export_path=".*"|export_path="build/game_debug.apk"|' export_presets.cfg
           
-          echo "=== EXPORT PRESET ==="
+          echo "=== FIXED EXPORT PRESET ==="
           grep -E "use_gradle_build|min_sdk|target_sdk|keystore" export_presets.cfg
       
       - name: Install xvfb
@@ -98,16 +114,24 @@ jobs:
           xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game_debug.apk 2>&1 | tee export.log
           
           if [ -f "build/game_debug.apk" ]; then
-            echo "✅ APK created!"
+            echo "✅ DEBUG APK created successfully!"
             ls -la build/game_debug.apk
+            file build/game_debug.apk
           else
-            echo "❌ Export failed"
+            echo "❌ Export failed. Last 100 lines:"
             tail -100 export.log
             exit 1
           fi
       
-      - name: Upload APK
+      - name: Upload DEBUG APK
         uses: actions/upload-artifact@v4
         with:
           name: godot4-debug-apk
           path: build/*.apk
+      
+      - name: Upload export log (if failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-log
+          path: export.log
