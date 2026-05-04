@@ -27,7 +27,6 @@ jobs:
           wget -O /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_export_templates.tpz
           cd ~/.local/share/godot/export_templates/4.6.2.stable
           unzip -o /tmp/templates.tpz
-          # Move files from templates/ to current directory
           if [ -d templates ]; then
             mv templates/* .
             rmdir templates
@@ -39,40 +38,48 @@ jobs:
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug, O=Android, C=US" -storepass android -keypass android
 
-      - name: Update export preset
+      - name: Fix export preset
         run: |
+          # Set min SDK and target SDK
+          sed -i 's|gradle_build/min_sdk=""|gradle_build/min_sdk="26"|' export_presets.cfg
+          sed -i 's|gradle_build/target_sdk=""|gradle_build/target_sdk="34"|' export_presets.cfg
+          # Set keystore path
           sed -i 's|keystore/debug=".*"|keystore/debug="debug.keystore"|' export_presets.cfg
           sed -i 's|keystore/debug_password=".*"|keystore/debug_password="android"|' export_presets.cfg
+          
+          echo "=== FIXED EXPORT PRESET ==="
+          cat export_presets.cfg
       
-      - name: Debug export with full force
+      - name: Validate and Export APK
         run: |
-          # Run Godot with all debug flags
-          ./Godot_v4.6.2-stable_linux.x86_64 --headless --verbose --debug --log-file=godot.log --export-release "Android" project.godot 2>&1 | tee full_output.log
+          mkdir -p build
           
-          # Dump Godot's internal state
-          echo "=== GODOT LOG ==="
-          cat godot.log || echo "No log file"
-          
-          echo "=== FULL OUTPUT ==="
-          cat full_output.log
-          
-          # Check for common errors
-          echo "=== CHECKING FOR COMMON ERRORS ==="
-          grep -i "error\|fail\|missing\|cannot\|invalid\|exception\|null\|crash" full_output.log || echo "No common errors found"
-          
-          # Check if export preset exists
-          echo "=== EXPORT PRESET CHECK ==="
+          echo "=== LISTING EXPORT PRESETS ==="
           ./Godot_v4.6.2-stable_linux.x86_64 --headless --list-export-presets project.godot
           
-          # Validate the project
-          echo "=== PROJECT VALIDATION ==="
-          ./Godot_v4.6.2-stable_linux.x86_64 --headless --validate-export-preset "Android" project.godot
+          echo "=== VALIDATING ANDROID PRESET ==="
+          ./Godot_v4.6.2-stable_linux.x86_64 --headless --validate-export-preset "Android" project.godot 2>&1 | tee validation.log
           
-          # Check Android configuration
-          echo "=== ANDROID CONFIGURATION ==="
-          ./Godot_v4.6.2-stable_linux.x86_64 --headless --print-android-export-configuration project.godot
+          echo "=== EXPORTING DEBUG APK ==="
+          ./Godot_v4.6.2-stable_linux.x86_64 --headless --verbose --export-debug "Android" project.godot build/game.apk 2>&1 | tee export.log
+          
+          echo "=== CHECKING RESULT ==="
+          ls -la build/
+          ls -la *.apk 2>/dev/null || echo "No APK in root"
+          find . -name "*.apk" 2>/dev/null
       
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: godot-build-logs
+          path: |
+            *.log
+            build/*.apk
+            export.log
+            validation.log
+      
+      - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: godot4-apk
           path: build/*.apk
