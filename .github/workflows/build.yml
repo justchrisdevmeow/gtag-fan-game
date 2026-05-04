@@ -22,10 +22,11 @@ jobs:
           preset: Android
           debugMode: "true"
           projectDir: .
-          args: --headless
+          entryPoint: Godot_v4.6.2-stable_linux.x86_64
+          args: --headless --export-debug Android gtag-fangame.apk
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Android-APK
-          path: ${{ github.workspace }}/${{ steps.build.outputs.build }}
+          path: ${{ github.workspace }}/gtag-fangame.apk
