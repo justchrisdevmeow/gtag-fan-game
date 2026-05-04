@@ -32,41 +32,39 @@ jobs:
             rmdir templates
           fi
       
-      - name: Manually install Android build template
+      - name: Install xvfb
         run: |
-          cd ~/.local/share/godot/export_templates/4.6.2.stable
-          
-          if [ -f "android_source.zip" ]; then
-            rm -rf /tmp/android_template
-            unzip -o android_source.zip -d /tmp/android_template/
-            
-            # Copy everything to project android folder
-            mkdir -p "$GITHUB_WORKSPACE/android"
-            cp -r /tmp/android_template/* "$GITHUB_WORKSPACE/android/"
-            echo "✅ Android template installed"
-            
-            # Verify
-            ls -la "$GITHUB_WORKSPACE/android/"
-            [ -f "$GITHUB_WORKSPACE/android/build.gradle" ] && echo "✅ build.gradle exists"
-          else
-            echo "❌ android_source.zip not found"
-            exit 1
-          fi
+          sudo apt-get update
+          sudo apt-get install -y xvfb
       
-      - name: Remove conflicting test files from Android template
+      - name: Let Godot install Android template (with timeout)
         run: |
-          # Remove test project that has its own project.godot (causes warnings)
-          rm -rf android/src/instrumented/assets/ 2>/dev/null || true
-          rm -rf android/src/instrumented/java/ 2>/dev/null || true
-          rm -rf android/src/androidTestInstrumented/ 2>/dev/null || true
-          rm -rf android/src/instrumented/res/ 2>/dev/null || true
+          # Run Godot's built-in template installer
+          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --install-android-build-template 2>&1 | tee install.log &
+          PID=$!
           
-          # Remove any Godot script files from android folder
-          find android -name "*.gd" -delete 2>/dev/null || true
-          find android -name "*.tscn" -delete 2>/dev/null || true
-          find android -name "*.uid" -delete 2>/dev/null || true
+          # Wait up to idk minutes
+          for i in {1..120}; do
+            sleep 5
+            if ! kill -0 $PID 2>/dev/null; then
+              echo "✅ Installation completed at $(($i*5)) seconds"
+              # Check if android folder was created with proper structure
+              if [ -f "android/build.gradle" ] && [ -f "android/src/main/AndroidManifest.xml" ]; then
+                echo "✅ Android template verified"
+                exit 0
+              else
+                echo "⚠️ Template installed but verification failed"
+                ls -la android/ 2>/dev/null
+                exit 1
+              fi
+            fi
+            echo "Installing... $(($i*5)) seconds"
+          done
           
-          echo "✅ Conflicting test files removed"
+          # Timeout after sum minutes
+          kill -9 $PID 2>/dev/null
+          echo "❌ Installation timed out after 180 seconds"
+          exit 1
       
       - name: Generate debug keystore
         run: |
@@ -75,7 +73,7 @@ jobs:
       
       - name: Fix export preset
         run: |
-          # Enable Gradle Build (REQUIRED for Godot 4)
+          # Enable Gradle Build
           sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
           
           # Set SDK versions
@@ -93,20 +91,11 @@ jobs:
             sed -i 's|keystore/debug_user=".*"|keystore/debug_user="androiddebugkey"|' export_presets.cfg
           fi
           
-          # Ensure release keystore is empty (DEBUG build)
-          sed -i 's|keystore/release=".*"|keystore/release=""|' export_presets.cfg
-          sed -i 's|keystore/release_password=".*"|keystore/release_password=""|' export_presets.cfg
-          
           # Set export path
           sed -i 's|export_path=".*"|export_path="build/game_debug.apk"|' export_presets.cfg
           
           echo "=== FIXED EXPORT PRESET ==="
           grep -E "use_gradle_build|min_sdk|target_sdk|keystore" export_presets.cfg
-      
-      - name: Install xvfb
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
       
       - name: Export DEBUG APK
         run: |
@@ -116,7 +105,6 @@ jobs:
           if [ -f "build/game_debug.apk" ]; then
             echo "✅ DEBUG APK created successfully!"
             ls -la build/game_debug.apk
-            file build/game_debug.apk
           else
             echo "❌ Export failed. Last 100 lines:"
             tail -100 export.log
@@ -129,9 +117,11 @@ jobs:
           name: godot4-debug-apk
           path: build/*.apk
       
-      - name: Upload export log (if failed)
-        if: failure()
+      - name: Upload logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: export-log
-          path: export.log
+          name: debug-logs
+          path: |
+            install.log
+            export.log
