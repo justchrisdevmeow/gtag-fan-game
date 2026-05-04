@@ -1,0 +1,63 @@
+name: Install Android Template to Repo
+
+on:
+  workflow_dispatch:  # Run this manually once
+
+jobs:
+  install-template:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install Godot 4.6.2
+        run: |
+          wget -O godot.zip https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_linux.x86_64.zip
+          unzip godot.zip
+          chmod +x Godot_v4.6.2-stable_linux.x86_64
+      
+      - name: Download Android export templates
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/4.6.2.stable
+          wget -O /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_export_templates.tpz
+          cd ~/.local/share/godot/export_templates/4.6.2.stable
+          unzip -o /tmp/templates.tpz
+          if [ -d templates ]; then
+            mv templates/* .
+            rmdir templates
+          fi
+      
+      - name: Extract Android template directly to repo
+        run: |
+          cd ~/.local/share/godot/export_templates/4.6.2.stable
+          
+          # Extract android_source.zip
+          unzip -o android_source.zip -d /tmp/android_template/
+          
+          # Copy to repo's android folder
+          rm -rf "$GITHUB_WORKSPACE/android"
+          mkdir -p "$GITHUB_WORKSPACE/android"
+          cp -r /tmp/android_template/* "$GITHUB_WORKSPACE/android/"
+          
+          # Remove conflicting test files
+          rm -rf "$GITHUB_WORKSPACE/android/src/instrumented/assets/"
+          rm -rf "$GITHUB_WORKSPACE/android/src/instrumented/java/"
+          rm -rf "$GITHUB_WORKSPACE/android/src/androidTestInstrumented/"
+          find "$GITHUB_WORKSPACE/android" -name "*.gd" -delete 2>/dev/null || true
+          find "$GITHUB_WORKSPACE/android" -name "*.tscn" -delete 2>/dev/null || true
+          
+          echo "✅ Android template extracted to android/"
+          ls -la "$GITHUB_WORKSPACE/android/"
+      
+      - name: Commit android folder to repo
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add android/
+          git status
+          git commit -m "Add Android build template [skip ci]" || echo "No changes to commit"
+          git push
