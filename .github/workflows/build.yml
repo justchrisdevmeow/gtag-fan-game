@@ -33,6 +33,16 @@ jobs:
             rmdir templates
           fi
           ls -la
+
+      - name: Generate debug keystore
+        run: |
+          keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug, O=Android, C=US" -storepass android -keypass android
+
+      - name: Update export preset
+        run: |
+          sed -i 's|keystore/debug=".*"|keystore/debug="debug.keystore"|' export_presets.cfg
+          sed -i 's|keystore/debug_password=".*"|keystore/debug_password="android"|' export_presets.cfg
       
       - name: Export APK
         run: |
