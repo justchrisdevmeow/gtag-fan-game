@@ -1,7 +1,10 @@
 name: Install Android Template to Repo
 
 on:
-  workflow_dispatch:  # Run this manually once
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   install-template:
@@ -9,6 +12,8 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -55,8 +60,8 @@ jobs:
       - name: Commit android folder to repo
         run: |
           cd "$GITHUB_WORKSPACE"
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add android/
           git status
           git commit -m "Add Android build template [skip ci]" || echo "No changes to commit"
