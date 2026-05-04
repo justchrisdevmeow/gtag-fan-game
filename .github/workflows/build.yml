@@ -31,12 +31,16 @@ jobs:
             mv templates/* .
             rmdir templates
           fi
-
+      
+      - name: Install Android build template in project
+        run: |
+          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --install-android-build-template
+      
       - name: Generate debug keystore
         run: |
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug, O=Android, C=US" -storepass android -keypass android
-
+      
       - name: Fix export preset
         run: |
           sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
@@ -47,10 +51,8 @@ jobs:
           if ! grep -q "keystore/debug_user" export_presets.cfg; then
             sed -i '/keystore\/debug_password/a keystore/debug_user="androiddebugkey"' export_presets.cfg
           fi
-          echo "=== FIXED PRESET ==="
-          cat export_presets.cfg
       
-      - name: Install xvfb (virtual display)
+      - name: Install xvfb
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
@@ -58,27 +60,10 @@ jobs:
       - name: Export APK
         run: |
           mkdir -p build
-          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game.apk 2>&1 | tee export.log
-          
-          # Check if APK was created
-          if [ -f "build/game.apk" ]; then
-            echo "✅ APK created successfully!"
-            ls -la build/game.apk
-          else
-            echo "❌ APK not found. Showing last 100 lines of log:"
-            tail -100 export.log
-            exit 1
-          fi
+          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game.apk
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: godot4-apk
           path: build/*.apk
-      
-      - name: Upload debug log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: export-log
-          path: export.log
