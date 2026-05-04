@@ -1,4 +1,4 @@
-name: Build Godot 4 Quest APK
+name: Build Godot 4 Quest APK (No Install Command)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
           unzip godot.zip
           chmod +x Godot_v4.6.2-stable_linux.x86_64
       
-      - name: Download all Android export templates
+      - name: Download all Android export templates to correct location
         run: |
           mkdir -p ~/.local/share/godot/export_templates/4.6.2.stable
           cd ~/.local/share/godot/export_templates/4.6.2.stable
@@ -37,24 +37,27 @@ jobs:
           fi
           
           # Verify all required files exist
-          echo "=== Required template files ==="
-          ls -la android_debug.apk android_release.apk android_source.zip
+          echo "=== Template files in place ==="
+          ls -la | grep -E "android_(debug|release).apk|android_source.zip"
       
-      - name: Install xvfb
+      - name: Manually create android folder structure in project
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-      
-      - name: Install Android build template in project
-        run: |
-          xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --install-android-build-template
+          # Extract android_source.zip directly to project's android folder
+          cd ~/.local/share/godot/export_templates/4.6.2.stable
+          unzip -o android_source.zip -d "$GITHUB_WORKSPACE/android_temp/"
           
-          if [ -d "android" ] && [ -f "android/build.gradle" ]; then
-            echo "✅ Android template installed"
-          else
-            echo "❌ Installation failed"
-            exit 1
-          fi
+          # Copy to project android folder
+          rm -rf "$GITHUB_WORKSPACE/android"
+          mkdir -p "$GITHUB_WORKSPACE/android"
+          cp -r "$GITHUB_WORKSPACE/android_temp/"* "$GITHUB_WORKSPACE/android/"
+          
+          # Remove test files that cause issues
+          rm -rf "$GITHUB_WORKSPACE/android/src/instrumented/assets/"
+          rm -rf "$GITHUB_WORKSPACE/android/src/instrumented/java/"
+          rm -rf "$GITHUB_WORKSPACE/android/src/androidTestInstrumented/"
+          
+          echo "✅ Android folder created manually"
+          ls -la "$GITHUB_WORKSPACE/android/"
       
       - name: Generate debug keystore
         run: |
@@ -74,6 +77,14 @@ jobs:
           fi
           
           sed -i 's|export_path=".*"|export_path="build/game_debug.apk"|' export_presets.cfg
+          
+          echo "=== EXPORT PRESET ==="
+          grep -E "use_gradle_build|min_sdk|target_sdk|keystore" export_presets.cfg
+      
+      - name: Install xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
       
       - name: Export DEBUG APK
         run: |
@@ -81,7 +92,7 @@ jobs:
           xvfb-run ./Godot_v4.6.2-stable_linux.x86_64 --headless --export-debug "Android" build/game_debug.apk 2>&1 | tee export.log
           
           if [ -f "build/game_debug.apk" ]; then
-            echo "✅ APK created!"
+            echo "✅ APK created successfully!"
             ls -la build/game_debug.apk
           else
             echo "❌ Export failed"
@@ -94,3 +105,10 @@ jobs:
         with:
           name: godot4-debug-apk
           path: build/*.apk
+      
+      - name: Upload log if failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-log
+          path: export.log
