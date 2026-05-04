@@ -15,12 +15,16 @@ jobs:
           lfs: true
       
       - name: Build Android APK
-        id: build
-        uses: manleydev/build-godot-action@v1.4.1
+        uses: justchrisdevmeow/build-godot-action@main
         with:
           name: gtag-fangame
           preset: Android
           debugMode: "true"
           projectDir: .
-          entryPoint: /usr/bin/godot
-          args: --headless --export-debug Android build/game.apk
+          headless: "true"
+      
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-APK
+          path: ${{ github.workspace }}/${{ steps.build.outputs.build }}
