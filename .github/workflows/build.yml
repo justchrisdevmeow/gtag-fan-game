@@ -33,6 +33,12 @@ jobs:
             wget -O /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_export_templates.tpz
             unzip -o /tmp/templates.tpz
             echo "✅ Export templates extracted"
+            
+            # Move android_source.zip from templates folder to current directory
+            if [ -f "templates/android_source.zip" ]; then
+              mv templates/android_source.zip .
+              echo "✅ android_source.zip moved to current directory"
+            fi
           fi
           
           # Verify android_source.zip exists
