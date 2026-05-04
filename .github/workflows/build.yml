@@ -32,15 +32,19 @@ jobs:
             rmdir templates
           fi
       
-      - name: Manually install Android build template
+      - name: Manually install Android build template from zip
         run: |
-          # Extract and copy Android template directly (faster than Godot command)
           cd ~/.local/share/godot/export_templates/4.6.2.stable
-          if [ -d "android-source" ]; then
-            cp -r android-source/* "$GITHUB_WORKSPACE/android/"
-            echo "✅ Android template installed manually"
+          # Extract android_source.zip
+          if [ -f "android_source.zip" ]; then
+            unzip -o android_source.zip -d android_source_temp/
+            # Copy to project android directory
+            mkdir -p "$GITHUB_WORKSPACE/android"
+            cp -r android_source_temp/* "$GITHUB_WORKSPACE/android/"
+            echo "✅ Android template installed from zip"
+            ls -la "$GITHUB_WORKSPACE/android/"
           else
-            echo "❌ android-source not found"
+            echo "❌ android_source.zip not found"
             ls -la
             exit 1
           fi
@@ -50,7 +54,7 @@ jobs:
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug, O=Android, C=US" -storepass android -keypass android
       
-      - name: Fix export preset (CLEAN VERSION)
+      - name: Fix export preset
         run: |
           # Enable Gradle Build (REQUIRED for Godot 4)
           sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
@@ -70,7 +74,7 @@ jobs:
             sed -i 's|keystore/debug_user=".*"|keystore/debug_user="androiddebugkey"|' export_presets.cfg
           fi
           
-          # Ensure release keystore is empty (we're doing DEBUG build)
+          # Ensure release keystore is empty (DEBUG build)
           sed -i 's|keystore/release=".*"|keystore/release=""|' export_presets.cfg
           sed -i 's|keystore/release_password=".*"|keystore/release_password=""|' export_presets.cfg
           
