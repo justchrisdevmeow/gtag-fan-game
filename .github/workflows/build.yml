@@ -1,4 +1,4 @@
-name: Build with Godot Android Docker
+name: Build with Official Godot Docker
 
 on:
   workflow_dispatch:
@@ -7,15 +7,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: barichello/godot-android:4.6.2
+      image: godotengine/godot:4.6.2
       
     steps:
       - uses: actions/checkout@v4
       
+      - name: Install Android SDK
+        run: |
+          apt-get update
+          apt-get install -y wget unzip openjdk-17-jdk
+          wget https://dl.google.com/android/repository/commandlinetools-linux-latest.zip
+          unzip commandlinetools-linux-latest.zip
+          mkdir -p /android-sdk
+          mv cmdline-tools /android-sdk/
+          export ANDROID_SDK_ROOT=/android-sdk
+      
       - name: Export APK
         run: |
           mkdir -p build
-          godot --export-debug "Android" build/game.apk
+          godot --headless --export-debug "Android" build/game.apk
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
