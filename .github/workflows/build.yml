@@ -15,7 +15,7 @@ jobs:
           lfs: true
       
       - name: Build Android APK
-        uses: justchrisdevmeow/build-godot-action@main
+        uses: justchrisdevmeow/build-godot-action@master
         with:
           name: gtag-fangame
           preset: Android
