@@ -39,11 +39,11 @@ jobs:
 
       - name: Fix export preset
         run: |
+          sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
           sed -i 's|gradle_build/min_sdk=""|gradle_build/min_sdk="26"|' export_presets.cfg
           sed -i 's|gradle_build/target_sdk=""|gradle_build/target_sdk="34"|' export_presets.cfg
           sed -i 's|keystore/debug=".*"|keystore/debug="debug.keystore"|' export_presets.cfg
           sed -i 's|keystore/debug_password=".*"|keystore/debug_password="android"|' export_presets.cfg
-          # Check if debug_user exists, if not add it
           if ! grep -q "keystore/debug_user" export_presets.cfg; then
             sed -i '/keystore\/debug_password/a keystore/debug_user="androiddebugkey"' export_presets.cfg
           fi
