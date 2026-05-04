@@ -27,6 +27,11 @@ jobs:
           wget -O /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_export_templates.tpz
           cd ~/.local/share/godot/export_templates/4.6.2.stable
           unzip -o /tmp/templates.tpz
+          # Move files from templates/ to current directory
+          if [ -d templates ]; then
+            mv templates/* .
+            rmdir templates
+          fi
           ls -la
       
       - name: Export APK
