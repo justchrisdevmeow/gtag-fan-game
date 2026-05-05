@@ -13,6 +13,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Build Docker image and check templates
+        run: |
+          docker build -t test-godot .
+          docker run --rm test-godot ls -la /github/home/.local/share/godot/export_templates/4.6.2.stable/
       
       - name: Build Android APK
         uses: justchrisdevmeow/build-godot-action@master
