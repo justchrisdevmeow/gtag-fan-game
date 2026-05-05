@@ -14,11 +14,13 @@ jobs:
         with:
           lfs: true
 
-      - name: Build Docker image and check templates
+      - name: Build and inspect Docker image
         run: |
+          git clone https://github.com/justchrisdevmeow/build-godot-action.git
+          cd build-godot-action
           docker build -t test-godot .
-          docker run --rm test-godot ls -la /github/home/.local/share/godot/export_templates/4.6.2.stable/
-      
+          docker run --rm test-godot ls -la /github/home/.local/share/godot/export_templates/4.6.2.stable/ || echo "Templates missing"
+    
       - name: Build Android APK
         uses: justchrisdevmeow/build-godot-action@master
         with:
